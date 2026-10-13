@@ -1,0 +1,61 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: finance-gmail-sync
+  namespace: finance
+spec:
+  schedule: "0 6 * * *"
+  timeZone: Asia/Bangkok
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 900
+      template:
+        spec:
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: gmail-sync
+              image: YOUR_REGISTRY/finance-gmail-homelab:0.1.0
+              imagePullPolicy: IfNotPresent
+              command: ["python", "-m", "app.gmail_sync"]
+              env:
+                - name: TZ
+                  value: Asia/Bangkok
+                - name: DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: finance-db
+                      key: database-url
+                - name: GMAIL_TOKEN_PATH
+                  value: /secrets/token.json
+              volumeMounts:
+                - name: gmail-oauth
+                  mountPath: /secrets
+                  readOnly: true
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+                limits:
+                  cpu: 500m
+                  memory: 512Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]
+          volumes:
+            - name: gmail-oauth
+              secret:
+                secretName: gmail-oauth-token
+                defaultMode: 0400
